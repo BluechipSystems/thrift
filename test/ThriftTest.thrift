@@ -36,6 +36,7 @@ namespace php ThriftTest
 namespace delphi Thrift.Test
 namespace cocoa ThriftTest
 namespace lua ThriftTest
+namespace xsd test (uri = 'http://thrift.apache.org/ns/ThriftTest')
 
 // Presence of namespaces and sub-namespaces for which there is
 // no generator should compile with warnings only
@@ -104,12 +105,13 @@ struct Insanity
 {
   1: map<Numberz, UserId> userMap,
   2: list<Xtruct> xtructs
-}
+} (python.immutable= "")
 
 struct CrazyNesting {
   1: string string_field,
   2: optional set<Insanity> set_field,
-  3: required list< map<set<i32>,map<i32,set<list<map<Insanity,string>>>>>> list_field,
+  // Do not insert line break as test/go/Makefile.am is removing this line with pattern match
+  3: required list<map<set<i32> (python.immutable = ""), map<i32,set<list<map<Insanity,string>(python.immutable = "")> (python.immutable = "")>>>> list_field,
   4: binary binary_field
 }
 

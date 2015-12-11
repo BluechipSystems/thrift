@@ -250,11 +250,13 @@ public:
   std::string go_imports_begin(bool ttypes);
   std::string go_imports_end();
   std::string render_includes(bool ttypes);
+  std::string render_included_programs(string& unused_protection);
   std::string render_import_protection();
   std::string render_fastbinary_includes();
   std::string declare_argument(t_field* tfield);
   std::string render_field_initial_value(t_field* tfield, const string& name, bool optional_field);
   std::string type_name(t_type* ttype);
+  std::string module_name(t_type* ttype);
   std::string function_signature(t_function* tfunction, std::string prefix = "");
   std::string function_signature_if(t_function* tfunction,
                                     std::string prefix = "",
@@ -764,6 +766,31 @@ void t_go_generator::init_generator() {
   f_const_values_ << endl << "func init() {" << endl;
 }
 
+
+string t_go_generator::render_included_programs(string& unused_protection) {
+  const vector<t_program*>& includes = program_->get_includes();
+  string result = "";
+
+  unused_protection = "";
+
+  for (size_t i = 0; i < includes.size(); ++i) {
+    string go_module = get_real_go_module(includes[i]);
+    size_t found = 0;
+    for (size_t j = 0; j < go_module.size(); j++) {
+      // Import statement uses slashes ('/') in namespace
+      if (go_module[j] == '.') {
+        go_module[j] = '/';
+        found = j + 1;
+      }
+    }
+
+    result += "\t\"" + gen_package_prefix_ + go_module + "\"\n";
+    unused_protection += "var _ = " + go_module.substr(found) + ".GoUnusedProtection__\n";
+  }
+
+  return result;
+}
+
 /**
  * Renders all the imports necessary for including another Thrift program.
  * If ttypes include the additional imports for ttypes.go.
@@ -978,9 +1005,13 @@ void t_go_generator::generate_enum(t_enum* tenum) {
   f_types_ << "}" << endl << endl;
 
   // Generate Value for driver.Valuer interface
-  f_types_ << "func (p " << tenum_name << ") Value() (driver.Value, error) {" <<endl;
-  f_types_ << "return int64(p), nil" << endl;
+  f_types_ << "func (p * " << tenum_name << ") Value() (driver.Value, error) {" <<endl;
+  f_types_ << "  if p == nil {" << endl;
+  f_types_ << "    return nil, nil" << endl;
+  f_types_ << "  }" << endl;
+  f_types_ << "return int64(*p), nil" << endl;
   f_types_ << "}" << endl;
+
 }
 
 /**
@@ -1468,7 +1499,7 @@ void t_go_generator::generate_go_struct_reader(ofstream& out,
     field_id = (*f_iter)->get_key();
 
     // if negative id, ensure we generate a valid method name
-    string field_method_prefix("readField");
+    string field_method_prefix("ReadField");
 
     if (field_id < 0) {
       field_method_prefix += "_";
@@ -1543,7 +1574,7 @@ void t_go_generator::generate_go_struct_reader(ofstream& out,
   for (f_iter = fields.begin(); f_iter != fields.end(); ++f_iter) {
     string field_type_name(publicize((*f_iter)->get_type()->get_name()));
     string field_name(publicize((*f_iter)->get_name()));
-    string field_method_prefix("readField");
+    string field_method_prefix("ReadField");
     int32_t field_id = (*f_iter)->get_key();
 
     if (field_id < 0) {
@@ -2092,6 +2123,8 @@ void t_go_generator::generate_service_remote(t_service* tservice) {
     service_module = gen_package_prefix_ + service_module;
   }
 
+  string unused_protection;
+
   f_remote << go_autogen_comment();
   f_remote << indent() << "package main" << endl << endl;
   f_remote << indent() << "import (" << endl;
@@ -2104,8 +2137,11 @@ void t_go_generator::generate_service_remote(t_service* tservice) {
   f_remote << indent() << "        \"strconv\"" << endl;
   f_remote << indent() << "        \"strings\"" << endl;
   f_remote << indent() << "        \"" + gen_thrift_import_ + "\"" << endl;
+  f_remote << indent() << render_included_programs(unused_protection);
   f_remote << indent() << "        \"" << service_module << "\"" << endl;
   f_remote << indent() << ")" << endl;
+  f_remote << indent() << endl;
+  f_remote << indent() << unused_protection; // filled in render_included_programs()
   f_remote << indent() << endl;
   f_remote << indent() << "func Usage() {" << endl;
   f_remote << indent() << "  fmt.Fprintln(os.Stderr, \"Usage of \", os.Args[0], \" "
@@ -2301,7 +2337,7 @@ void t_go_generator::generate_service_remote(t_service* tservice) {
           f_remote << indent() << "  Usage()" << endl;
           f_remote << indent() << "  return" << endl;
           f_remote << indent() << "}" << endl;
-          f_remote << indent() << "argvalue" << i << " := byte(tmp" << i << ")" << endl;
+          f_remote << indent() << "argvalue" << i << " := int8(tmp" << i << ")" << endl;
           break;
 
         case t_base_type::TYPE_I16:
@@ -2311,7 +2347,7 @@ void t_go_generator::generate_service_remote(t_service* tservice) {
           f_remote << indent() << "  Usage()" << endl;
           f_remote << indent() << "  return" << endl;
           f_remote << indent() << "}" << endl;
-          f_remote << indent() << "argvalue" << i << " := byte(tmp" << i << ")" << endl;
+          f_remote << indent() << "argvalue" << i << " := int16(tmp" << i << ")" << endl;
           break;
 
         case t_base_type::TYPE_I32:
@@ -2356,6 +2392,11 @@ void t_go_generator::generate_service_remote(t_service* tservice) {
         string jsProt(tmp("jsProt"));
         string err2(tmp("err"));
         std::string tstruct_name(publicize(the_type->get_name()));
+        std::string tstruct_module( module_name(the_type));
+        if(tstruct_module.empty()) {
+          tstruct_module = package_name_;
+        }
+
         f_remote << indent() << arg << " := flag.Arg(" << flagArg << ")" << endl;
         f_remote << indent() << mbTrans << " := thrift.NewTMemoryBufferLen(len(" << arg << "))"
                  << endl;
@@ -2369,7 +2410,7 @@ void t_go_generator::generate_service_remote(t_service* tservice) {
         f_remote << indent() << factory << " := thrift.NewTSimpleJSONProtocolFactory()" << endl;
         f_remote << indent() << jsProt << " := " << factory << ".GetProtocol(" << mbTrans << ")"
                  << endl;
-        f_remote << indent() << "argvalue" << i << " := " << package_name_ << ".New" << tstruct_name
+        f_remote << indent() << "argvalue" << i << " := " << tstruct_module << ".New" << tstruct_name
                  << "()" << endl;
         f_remote << indent() << err2 << " := argvalue" << i << "." << read_method_name_ <<  "(" << jsProt << ")" << endl;
         f_remote << indent() << "if " << err2 << " != nil {" << endl;
@@ -2412,7 +2453,11 @@ void t_go_generator::generate_service_remote(t_service* tservice) {
       }
 
       if (the_type->is_typedef()) {
-        f_remote << indent() << "value" << i << " := " << package_name_ << "."
+        std::string typedef_module( module_name(the_type));
+        if(typedef_module.empty()) {
+          typedef_module = package_name_;
+        }
+        f_remote << indent() << "value" << i << " := " << typedef_module << "."
                  << publicize(the_type->get_name()) << "(argvalue" << i << ")" << endl;
       } else {
         f_remote << indent() << "value" << i << " := argvalue" << i << endl;
@@ -3401,6 +3446,17 @@ string t_go_generator::argument_list(t_struct* tstruct) {
 string t_go_generator::type_name(t_type* ttype) {
   t_program* program = ttype->get_program();
 
+  string module( module_name(ttype));
+  if( ! module.empty()) {
+    return module + "." + ttype->get_name();
+  }
+
+  return ttype->get_name();
+}
+
+string t_go_generator::module_name(t_type* ttype) {
+  t_program* program = ttype->get_program();
+
   if (program != NULL && program != program_) {
     string module(get_real_go_module(program));
     // for namespaced includes, only keep part after dot.
@@ -3408,10 +3464,10 @@ string t_go_generator::type_name(t_type* ttype) {
     if (dot != string::npos) {
       module = module.substr(dot + 1);
     }
-    return module + "." + ttype->get_name();
+    return module;
   }
 
-  return ttype->get_name();
+  return "";
 }
 
 /**

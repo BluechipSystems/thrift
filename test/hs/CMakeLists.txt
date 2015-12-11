@@ -61,10 +61,17 @@ set(hs_crosstest_args
     -odir=${CMAKE_CURRENT_BINARY_DIR}
     -hidir=${CMAKE_CURRENT_BINARY_DIR}
 )
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(hs_optimize -O0)
+else()
+  set(hs_optimize -O1)
+endif()
+
 add_custom_command(
     OUTPUT ${hs_crosstest_apps}
-    COMMAND ${GHC} ${hs_crosstest_args} ${CMAKE_CURRENT_SOURCE_DIR}/TestServer.hs -o TestServer
-    COMMAND ${GHC} ${hs_crosstest_args} ${CMAKE_CURRENT_SOURCE_DIR}/TestClient.hs -o TestClient
+    COMMAND ${GHC} ${hs_optimize} ${hs_crosstest_args} ${CMAKE_CURRENT_SOURCE_DIR}/TestServer.hs -o TestServer
+    COMMAND ${GHC} ${hs_optimize} ${hs_crosstest_args} ${CMAKE_CURRENT_SOURCE_DIR}/TestClient.hs -o TestClient
     DEPENDS ${hs_test_gen} haskell_library TestServer.hs TestClient.hs
 )
 add_custom_target(haskell_crosstest ALL
@@ -99,9 +106,9 @@ set(hs_test_gen_sources
     ${PROJECT_SOURCE_DIR}/test/Include.thrift
 )
 add_custom_command(OUTPUT ${hs_test_gen}
-    COMMAND thrift-compiler --gen hs ${PROJECT_SOURCE_DIR}/test/ConstantsDemo.thrift
-    COMMAND thrift-compiler --gen hs ${PROJECT_SOURCE_DIR}/test/DebugProtoTest.thrift
-    COMMAND thrift-compiler --gen hs ${PROJECT_SOURCE_DIR}/test/ThriftTest.thrift
-    COMMAND thrift-compiler --gen hs ${PROJECT_SOURCE_DIR}/test/Include.thrift
-    DEPENDS thrift-compiler ${hs_test_gen_sources}
+    COMMAND ${THRIFT_COMPILER} --gen hs ${PROJECT_SOURCE_DIR}/test/ConstantsDemo.thrift
+    COMMAND ${THRIFT_COMPILER} --gen hs ${PROJECT_SOURCE_DIR}/test/DebugProtoTest.thrift
+    COMMAND ${THRIFT_COMPILER} --gen hs ${PROJECT_SOURCE_DIR}/test/ThriftTest.thrift
+    COMMAND ${THRIFT_COMPILER} --gen hs ${PROJECT_SOURCE_DIR}/test/Include.thrift
+    DEPENDS ${hs_test_gen_sources}
 )
